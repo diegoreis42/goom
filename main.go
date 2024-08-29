@@ -1,17 +1,37 @@
 package main
 
 import (
+    "bufio"
     "fmt"
     "image"
     "os"
+    "os/exec"
+    "runtime"
+    "time"
+
     "gocv.io/x/gocv"
 )
 
 const (
-    asciiChars = " .:-=+*#123%@"
-    width      =  80 // Width of the ASCII art in characters
-    height     = 24  // Height of the ASCII art in characters
+    asciiChars = " .:-=+*#%@"
 )
+
+func clearScreen() {
+    var cmd *exec.Cmd
+    switch runtime.GOOS {
+    case "windows":
+        cmd = exec.Command("cmd", "/c", "cls")
+    default:
+        cmd = exec.Command("clear")
+    }
+    cmd.Stdout = os.Stdout
+    _ = cmd.Run()
+}
+
+func mapPixelToAscii(pixelValue uint8) byte {
+    idx := int(pixelValue) * (len(asciiChars) - 1) / 255
+    return asciiChars[idx]
+}
 
 func main() {
     // Open webcam
@@ -22,13 +42,21 @@ func main() {
     }
     defer webcam.Close()
 
-    // Create a window to display the original image
-    window := gocv.NewWindow("Webcam")
-    defer window.Close()
+    if !webcam.IsOpened() {
+        fmt.Println("Error: Could not open webcam.")
+        os.Exit(1)
+    }
 
     // Create a Mat to store frames
     img := gocv.NewMat()
     defer img.Close()
+
+    // Get terminal size
+    width, height := 80, 24
+
+    clearScreen()
+    fmt.Println("Press Ctrl+C to exit...")
+
     // Main loop
     for {
         if ok := webcam.Read(&img); !ok || img.Empty() {
@@ -42,18 +70,27 @@ func main() {
         // Convert the image to grayscale
         gocv.CvtColor(img, &img, gocv.ColorBGRToGray)
 
-        // Clear the terminal
-        fmt.Print("\033[H\033[2J")
+        // Use buffered output for better performance
+        writer := bufio.NewWriter(os.Stdout)
 
         // Convert image to ASCII art
         for y := 0; y < img.Rows(); y++ {
             for x := 0; x < img.Cols(); x++ {
                 pixel := img.GetUCharAt(y, x)
-                idx := int(pixel) * len(asciiChars) / 256
-                fmt.Printf("%c", asciiChars[idx])
+                writer.WriteByte(mapPixelToAscii(pixel))
             }
-            fmt.Println()
+            writer.WriteByte('\n')
         }
+
+        writer.Flush()
+
+        // Add a small delay to limit frame rate and prevent high CPU usage
+        time.Sleep(50 * time.Millisecond)
+
+        // Move cursor to top left to overwrite the previous frame
+        fmt.Print("\033[H")
     }
 }
+
+
 
