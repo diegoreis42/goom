@@ -1,76 +1,34 @@
 package main
 
 import (
-    "bufio"
-    "fmt"
-    "image"
-    "os"
-    "os/exec"
-    "time"
-
-    "gocv.io/x/gocv"
+	"github.com/rivo/tview"
+	"github.com/gdamore/tcell/v2"
+  "renderer"
 )
-
-const (
-  asciiChars = " ._,:;ox=%#@"
-)
-
-func clearScreen() {
-    cmd := exec.Command("clear")
-    cmd.Stdout = os.Stdout
-    _ = cmd.Run()
-}
-
-func mapPixelToAscii(pixelValue uint8) byte {
-    idx := int(pixelValue) * (len(asciiChars) - 1) / 255
-    return asciiChars[idx]
-}
 
 func main() {
-    webcam, err := gocv.VideoCaptureDevice(0)
-    if err != nil {
-        fmt.Println("Error opening webcam:", err)
-        os.Exit(1)
-    }
-    defer webcam.Close()
+	app := tview.NewApplication()
 
-    if !webcam.IsOpened() {
-        fmt.Println("Error: Could not open webcam.")
-        os.Exit(1)
-    }
+	presentation := tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetText("Welcome to the Application\n\nPress 'E' to Enter")
 
-    img := gocv.NewMat()
-    defer img.Close()
+	presentation.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'E', 'e':
+      renderer.Run()
+			app.Stop()
+		case 'Q', 'q':
+			app.Stop()
+		}
+		return event
+	})
 
-    width, height := 100, 24
+	flex := tview.NewFlex().
+		AddItem(presentation, 0, 1, true)
 
-    clearScreen()
-
-    for {
-        if ok := webcam.Read(&img); !ok || img.Empty() {
-            fmt.Println("Error reading image from webcam")
-            continue
-        }
-
-        gocv.Resize(img, &img, image.Point{width, height}, 0, 0, gocv.InterpolationDefault)
-
-        gocv.CvtColor(img, &img, gocv.ColorBGRToGray)
-
-        writer := bufio.NewWriter(os.Stdout)
-
-        for y := 0; y < img.Rows(); y++ {
-            for x := 0; x < img.Cols(); x++ {
-                pixel := img.GetUCharAt(y, x)
-                writer.WriteByte(mapPixelToAscii(pixel))
-            }
-            writer.WriteByte('\n')
-        }
-
-        writer.Flush()
-
-        time.Sleep(25 * time.Millisecond)
-
-        fmt.Print("\033[H")
-    }
+	if err := app.SetRoot(flex, true).Run(); err != nil {
+		panic(err)
+	}
 }
 
